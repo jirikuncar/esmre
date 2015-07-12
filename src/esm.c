@@ -21,6 +21,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "aho_corasick.h"
 
+#ifndef Py_TYPE
+    #define Py_TYPE(ob) (((PyObject*)(ob))->ob_type)
+#endif
+
 typedef struct {
     PyObject_HEAD
     ac_index*   index;
@@ -35,7 +39,7 @@ decref_result_object(void* item, void* data) {
 static void
 esm_Index_dealloc(esm_IndexObject* self) {
     ac_index_free(self->index, decref_result_object);
-    self->ob_type->tp_free((PyObject*) self);
+    Py_TYPE(self)->tp_free ((PyObject*) self);
 }
 
 static PyObject*
@@ -180,10 +184,14 @@ static PyMemberDef esm_Index_members[] = {
     {NULL}  /* Sentinel */
 };
 
+// support old python 2.5
+#ifndef PyVarObject_HEAD_INIT
+    #define PyVarObject_HEAD_INIT(type, size) \
+        PyObject_HEAD_INIT(type) size,
+#endif
 
 static PyTypeObject esm_IndexType = {
-    PyObject_HEAD_INIT(NULL)
-    0,                                  /*ob_size*/
+    PyVarObject_HEAD_INIT(NULL, 0)
     "esm.Index",                        /*tp_name*/
     sizeof(esm_IndexObject),            /*tp_basicsize*/
     0,                                  /*tp_itemsize*/
@@ -231,21 +239,51 @@ static PyMethodDef esm_methods[] = {
 #define PyMODINIT_FUNC void
 #endif
 PyMODINIT_FUNC
-initesm(void) 
+#if PY_MAJOR_VERSION >= 3
+PyInit_esm(void)
+#else
+initesm(void)
+#endif
 {
     PyObject* m;
 
     if (PyType_Ready(&esm_IndexType) < 0)
+#if PY_MAJOR_VERSION >= 3
+        return NULL;
+#else
         return;
+#endif
 
+#if PY_MAJOR_VERSION >= 3
+    static struct PyModuleDef moduledef = {
+        PyModuleDef_HEAD_INIT,
+        "esm",     /* m_name */
+        "Support for efficient string matching.",  /* m_doc */
+        -1,                  /* m_size */
+        esm_methods,    /* m_methods */
+        NULL,                /* m_reload */
+        NULL,                /* m_traverse */
+        NULL,                /* m_clear */
+        NULL,                /* m_free */
+    };
+    m = PyModule_Create(&moduledef);
+#else
     m = Py_InitModule3("esm", esm_methods,
                        "Support for efficient string matching.");
+#endif
     
     if (m == NULL) {
+#if PY_MAJOR_VERSION >= 3
+        return NULL;
+#else
         return;
+#endif
     }
 
     Py_INCREF(&esm_IndexType);
     PyModule_AddObject(m, "Index", (PyObject *)&esm_IndexType);
+#if PY_MAJOR_VERSION >= 3
+    return m;
+#endif
 }
 
